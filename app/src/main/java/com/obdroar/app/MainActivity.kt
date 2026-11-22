@@ -15,6 +15,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -54,11 +56,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.obdroar.app.ui.screens.ConnectDialog
 import com.obdroar.app.ui.screens.DashboardScreen
 import com.obdroar.app.ui.screens.DiagnosticsScreen
+import com.obdroar.app.ui.screens.HistoryScreen
 import com.obdroar.app.ui.screens.LiveDataScreen
 import com.obdroar.app.ui.screens.SoundScreen
 import com.obdroar.app.ui.screens.VehicleScreen
@@ -85,12 +89,16 @@ class MainActivity : ComponentActivity() {
 
 private data class Tab(val title: String, val icon: ImageVector)
 
+private const val TAB_DIAGNOSE = 2
+private const val TAB_VEHICLE = 5
+
 private val tabs = listOf(
-    Tab("Dashboard", Icons.Filled.Dashboard),
-    Tab("Live data", Icons.Filled.ShowChart),
-    Tab("Diagnose", Icons.Filled.Build),
+    Tab("Dash", Icons.Filled.Dashboard),
+    Tab("Live", Icons.Filled.ShowChart),
+    Tab("Codes", Icons.Filled.Build),
+    Tab("History", Icons.Filled.History),
     Tab("Sound", Icons.Filled.GraphicEq),
-    Tab("Vehicle", Icons.Filled.DirectionsCar),
+    Tab("Car", Icons.Filled.DirectionsCar),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,6 +106,7 @@ private val tabs = listOf(
 private fun App(vm: MainViewModel) {
     val context = LocalContext.current
     val conn by vm.conn.collectAsStateWithLifecycle()
+    val recordingId by vm.currentSessionId.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var showPicker by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
@@ -147,6 +156,13 @@ private fun App(vm: MainViewModel) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("OBD", fontWeight = FontWeight.Black)
                         Text(" ROAR", fontWeight = FontWeight.Black, color = RoarColors.Orange)
+                        if (recordingId != null) {
+                            Text(
+                                "  ● REC", color = RoarColors.Red, fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                modifier = Modifier.clickable { tab = 3 }
+                            )
+                        }
                     }
                 },
                 actions = {
@@ -156,7 +172,7 @@ private fun App(vm: MainViewModel) {
                         ConnState.DISCONNECTED -> "Connect" to RoarColors.TextDim
                     }
                     AssistChip(
-                        onClick = { if (conn.state == ConnState.CONNECTED) tab = 4 else onConnect() },
+                        onClick = { if (conn.state == ConnState.CONNECTED) tab = TAB_VEHICLE else onConnect() },
                         label = { Text(label, maxLines = 1) },
                         leadingIcon = {
                             Canvas(Modifier.size(8.dp)) { drawCircle(color) }
@@ -188,10 +204,11 @@ private fun App(vm: MainViewModel) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                0 -> DashboardScreen(vm, onConnect = onConnect, onOpenDiagnostics = { tab = 2 })
+                0 -> DashboardScreen(vm, onConnect = onConnect, onOpenDiagnostics = { tab = TAB_DIAGNOSE })
                 1 -> LiveDataScreen(vm)
-                2 -> DiagnosticsScreen(vm)
-                3 -> SoundScreen(vm)
+                TAB_DIAGNOSE -> DiagnosticsScreen(vm)
+                3 -> HistoryScreen(vm)
+                4 -> SoundScreen(vm)
                 else -> VehicleScreen(vm, onConnect = onConnect)
             }
         }

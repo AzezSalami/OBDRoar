@@ -176,3 +176,13 @@ object SensorInfoDb {
 
     fun get(code: Int): SensorInfo? = db[code]
 }
+
+/** Display helpers that also cover the adapter battery reading (not an OBD PID). */
+object Sensors {
+    fun name(code: Int): String = Pids.byCode[code]?.name
+        ?: if (code == SensorInfoDb.BATTERY) "Battery voltage" else "PID %02X".format(code)
+
+    fun unit(code: Int): String = Pids.byCode[code]?.unit ?: if (code == SensorInfoDb.BATTERY) "V" else ""
+
+    fun decimals(code: Int): Int = Pids.byCode[code]?.decimals ?: if (code == SensorInfoDb.BATTERY) 1 else 0
+}

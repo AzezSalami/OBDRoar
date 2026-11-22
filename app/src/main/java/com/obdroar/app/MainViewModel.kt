@@ -2,8 +2,11 @@ package com.obdroar.app
 
 import android.app.Application
 import android.bluetooth.BluetoothDevice
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.obdroar.app.data.HistoryRepository
+import com.obdroar.app.data.Sample
 import com.obdroar.app.obd.BluetoothTransport
 import com.obdroar.app.obd.DemoTransport
 import com.obdroar.app.obd.DtcDatabase
@@ -12,6 +15,7 @@ import com.obdroar.app.obd.MonitorStatus
 import com.obdroar.app.obd.ObdSession
 import com.obdroar.app.obd.ObdTransport
 import com.obdroar.app.obd.PidDef
+import com.obdroar.app.obd.SensorInfoDb
 import com.obdroar.app.obd.Pids
 import com.obdroar.app.obd.VinDecoder
 import com.obdroar.app.sound.EngineProfiles
@@ -28,6 +32,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
 import java.io.IOException
 import java.util.Calendar
 
@@ -95,6 +100,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val messages: SharedFlow<String> = _messages
 
+    // ---- history (saved readings)
+    val history = HistoryRepository(app)
+    private val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
+
+    private val _recordHistory = MutableStateFlow(prefs.getBoolean("record_history", true))
+    val recordHistory: StateFlow<Boolean> = _recordHistory.asStateFlow()
+
+    /** Id of the session being recorded right now, or null. */
+    private val _currentSession = MutableStateFlow<Long?>(null)
+    val currentSessionId: StateFlow<Long?> = _currentSession.asStateFlow()
+
+    /** Bumped whenever sessions are added, closed or deleted, so the History list reloads. */
+    private val _historyVersion = MutableStateFlow(0)
+    val historyVersion: StateFlow<Int> = _historyVersion.asStateFlow()
+
+    private val pendingSamples = ArrayList<Sample>()
+    private val lastSaved = HashMap<Int, Long>()
+    private var flushJob: Job? = null
+    private var startRecordingJob: Job? = null
+
     private var session: ObdSession? = null
     private var connectJob: Job? = null
     private var pollJob: Job? = null
@@ -120,6 +145,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     supported = s.supportedPids,
                 )
                 _conn.update { it.copy(state = ConnState.CONNECTED, status = "Connected", error = null) }
+                startRecording()
                 startPolling(s, demo)
                 loadVehicleInfo(s)
                 scanDtcs()
@@ -134,6 +160,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun disconnect() {
+        stopRecording()
         pollJob?.cancel(); pollJob = null
         connectJob?.cancel(); connectJob = null
         session?.close(); session = null
@@ -144,6 +171,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun connectionLost(e: Exception) {
+        stopRecording()
         session?.close(); session = null
         engine.externalRpm = null
         _conn.value = ConnUi(error = "Connection lost: ${e.message}")
@@ -173,7 +201,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     }
                     if (cycle % 25 == 0) {
-                        s.readVoltage()?.let { v -> _vehicle.update { it.copy(voltage = v) } }
+                        s.readVoltage()?.let { v ->
+                            _vehicle.update { it.copy(voltage = v) }
+                            recordSample(SensorInfoDb.BATTERY, v)
+                        }
                     }
                     cycle++
                     errors = 0
@@ -213,6 +244,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val hist = ((old?.history ?: emptyList()) + v.toFloat()).takeLast(120)
             map + (code to Reading(v, minOf(old?.min ?: v, v), maxOf(old?.max ?: v, v), hist))
         }
+        recordSample(code, v)
     }
 
     // ======================================================================= diagnostics
@@ -231,6 +263,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     stored = stored, pending = pending, permanent = permanent,
                     monitor = monitor, lastScan = System.currentTimeMillis()
                 )
+                _currentSession.value?.let { sid ->
+                    val seen = stored.map { it.code to "stored" } + pending.map { it.code to "pending" } +
+                        permanent.map { it.code to "permanent" }
+                    if (seen.isNotEmpty()) {
+                        runCatching { history.addDtcs(sid, seen) }
+                        _historyVersion.update { it + 1 }
+                    }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -258,6 +298,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun loadVehicleInfo(s: ObdSession) {
         val vin = try { s.readVin() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
         if (vin != null) {
+            _currentSession.value?.let { sid -> runCatching { history.setVin(sid, vin) } }
             _vehicle.update {
                 it.copy(
                     vin = vin,
@@ -316,6 +357,83 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun onAppBackground() {
         if (_sound.value.on) setEngineOn(false)
     }
+
+    // ======================================================================= history
+
+    fun setRecordHistory(on: Boolean) {
+        prefs.edit().putBoolean("record_history", on).apply()
+        _recordHistory.value = on
+        if (on && _conn.value.state == ConnState.CONNECTED) startRecording() else if (!on) stopRecording()
+    }
+
+    private fun startRecording() {
+        if (!_recordHistory.value || _currentSession.value != null || startRecordingJob?.isActive == true) return
+        val device = _conn.value.device
+        val demo = _conn.value.demo
+        startRecordingJob = viewModelScope.launch {
+            val id = try { history.startSession(device, demo) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                _messages.tryEmit("Could not start saving history: ${e.message}"); return@launch
+            }
+            lastSaved.clear()
+            _currentSession.value = id
+            _vehicle.value.vin?.let { vin -> runCatching { history.setVin(id, vin) } }
+            _historyVersion.update { it + 1 }
+            flushJob?.cancel()
+            flushJob = launch {
+                while (isActive) {
+                    delay(2000)
+                    val batch = drainSamples()
+                    if (batch.isNotEmpty()) runCatching { history.addSamples(id, batch) }
+                }
+            }
+        }
+    }
+
+    /** Saves at most one reading per sensor per second to keep the database small. */
+    private fun recordSample(code: Int, v: Double) {
+        if (_currentSession.value == null) return
+        val now = System.currentTimeMillis()
+        val last = lastSaved[code]
+        if (last != null && now - last < 1000) return
+        lastSaved[code] = now
+        synchronized(pendingSamples) { pendingSamples += Sample(now, code, v) }
+    }
+
+    private fun drainSamples(): List<Sample> = synchronized(pendingSamples) {
+        val copy = ArrayList(pendingSamples)
+        pendingSamples.clear()
+        copy
+    }
+
+    private fun stopRecording() {
+        startRecordingJob?.cancel(); startRecordingJob = null
+        flushJob?.cancel(); flushJob = null
+        val sid = _currentSession.value ?: return
+        _currentSession.value = null
+        val batch = drainSamples()
+        lastSaved.clear()
+        history.finishAsync(sid, batch) { _historyVersion.update { it + 1 } }
+    }
+
+    fun deleteSession(id: Long) {
+        viewModelScope.launch {
+            runCatching { history.deleteSession(id) }
+            _historyVersion.update { it + 1 }
+        }
+    }
+
+    fun deleteAllHistory() {
+        viewModelScope.launch {
+            runCatching { history.deleteAll(_currentSession.value) }
+            _historyVersion.update { it + 1 }
+            _messages.tryEmit("History deleted")
+        }
+    }
+
+    suspend fun exportCsv(id: Long): File? =
+        try { history.exportCsv(id) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            _messages.tryEmit("Export failed: ${e.message}"); null
+        }
 
     override fun onCleared() {
         engine.stopAudio()

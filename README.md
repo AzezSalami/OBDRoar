@@ -18,6 +18,11 @@ can rev yourself or that follows your car's real RPM.
 - Emission readiness monitors, with petrol and diesel labels
 - Vehicle info: VIN, make and model year read from the VIN, adapter chip, protocol, battery voltage, and the list
   of supported sensors
+- **History**: while connected, the app saves one reading per sensor per second (plus battery voltage) and
+  every trouble code it finds. The data stays on the phone. Each drive is listed with its duration, top RPM, top
+  speed and the number of codes found. Open a drive to see a graph for any sensor; drag your finger along it to
+  read the value at any moment. You can export a drive as a CSV spreadsheet or delete drives. Saving can be
+  turned off in the History tab.
 - **Demo car mode**, so you can try every screen without an adapter
 
 **Engine sound (just for fun)**
@@ -83,7 +88,9 @@ Bluetooth LE-only adapters are not supported.
 ```
 app/src/main/java/com/obdroar/app/
 ├── MainActivity.kt          navigation, permissions, top and bottom bars
-├── MainViewModel.kt         connection, polling loop, diagnostics, sound controls
+├── MainViewModel.kt         connection, polling loop, diagnostics, history recording, sound controls
+├── data/
+│   └── HistoryRepository.kt saved drives, readings and codes (built-in SQLite), CSV export
 ├── obd/
 │   ├── Transport.kt         Bluetooth SPP socket (with fallbacks for clones)
 │   ├── ObdSession.kt        ELM327 protocol: init, PIDs, DTCs (CAN and legacy), VIN, monitors
