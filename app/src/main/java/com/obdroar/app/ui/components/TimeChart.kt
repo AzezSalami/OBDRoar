@@ -54,7 +54,7 @@ fun TimeChart(
     val paint = remember {
         android.graphics.Paint().apply {
             isAntiAlias = true
-            color = RoarColors.TextDim.toArgb()
+            this.color = RoarColors.TextDim.toArgb()
         }
     }
 
