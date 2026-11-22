@@ -98,6 +98,7 @@ fun ArcGauge(
     decimals: Int = 0,
     tickLabel: (Float) -> String = { it.roundToInt().toString() },
     accent: Color = RoarColors.Orange,
+    onInfo: (() -> Unit)? = null,
 ) {
     val target = (((value ?: min) - min) / (max - min)).coerceIn(0f, 1f)
     val frac by animateFloatAsState(
@@ -192,6 +193,7 @@ fun ArcGauge(
             )
             Text("$unit · $label", fontSize = 11.sp, color = RoarColors.TextDim)
         }
+        if (onInfo != null) InfoIcon(onInfo, Modifier.align(Alignment.TopEnd))
     }
 }
 
@@ -204,6 +206,7 @@ fun StatTile(
     modifier: Modifier = Modifier,
     accent: Color = RoarColors.Orange,
     progress: Float? = null,
+    onInfo: (() -> Unit)? = null,
 ) {
     Column(
         modifier
@@ -212,13 +215,14 @@ fun StatTile(
             .border(1.dp, RoarColors.Outline.copy(alpha = 0.6f), RoundedCornerShape(18.dp))
             .padding(14.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier.size(28.dp).clip(CircleShape).background(accent.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) { Icon(icon, null, tint = accent, modifier = Modifier.size(16.dp)) }
             Spacer(Modifier.width(8.dp))
-            Text(label, fontSize = 12.sp, color = RoarColors.TextDim, maxLines = 1)
+            Text(label, fontSize = 12.sp, color = RoarColors.TextDim, maxLines = 1, modifier = Modifier.weight(1f))
+            if (onInfo != null) InfoIcon(onInfo, Modifier.size(28.dp))
         }
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.Bottom) {

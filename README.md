@@ -11,6 +11,8 @@ can rev yourself or that follows your car's real RPM.
   pressure, battery voltage, fuel level, fuel trims, oil temperature, timing and fuel rate
 - **Live data**: every Mode 01 sensor the car supports (about 55 PIDs), grouped by category, with min/max values
   and a live graph for each one
+- A **(!) icon next to every sensor** (gauges, dashboard tiles and live data rows): tap it to see what the sensor
+  measures, its unit, normal values, a practical tip and the current reading
 - **Diagnostics**: check-engine light status, stored, pending and permanent trouble codes, each with a
   description, severity, common causes and an online lookup. You can clear codes (it asks you to confirm first).
 - Emission readiness monitors, with petrol and diesel labels

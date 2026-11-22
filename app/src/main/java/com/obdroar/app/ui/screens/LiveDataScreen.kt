@@ -33,6 +33,7 @@ fun LiveDataScreen(vm: MainViewModel) {
     val vehicle by vm.vehicle.collectAsStateWithLifecycle()
     var category by remember { mutableStateOf("All") }
     val expanded = remember { mutableStateMapOf<Int, Boolean>() }
+    var infoFor by remember { mutableStateOf<Int?>(null) }
 
     if (conn.state != ConnState.CONNECTED) {
         EmptyHint(Icons.Filled.ShowChart, "No live data yet", "Connect to an OBD2 adapter (or the demo car) to stream every sensor your engine reports.")
@@ -53,7 +54,7 @@ fun LiveDataScreen(vm: MainViewModel) {
             }
         }
         Text(
-            "${live.size} of ${pids.size} sensors reporting · tap a row for its graph",
+            "${live.size} of ${pids.size} sensors reporting · tap a row for its graph, (!) for an explanation",
             fontSize = 12.sp, color = RoarColors.TextDim, modifier = Modifier.padding(horizontal = 16.dp)
         )
         LazyColumn(
@@ -62,18 +63,25 @@ fun LiveDataScreen(vm: MainViewModel) {
         ) {
             items(shown, key = { it.code }) { pid ->
                 val isOpen = expanded[pid.code] == true
-                PidRow(pid, live[pid.code], isOpen) { expanded[pid.code] = !isOpen }
+                PidRow(pid, live[pid.code], isOpen, onInfo = { infoFor = pid.code }) { expanded[pid.code] = !isOpen }
             }
         }
+    }
+
+    infoFor?.let { code ->
+        SensorInfoDialog(code, live[code]?.value) { infoFor = null }
     }
 }
 
 @Composable
-private fun PidRow(pid: PidDef, reading: Reading?, open: Boolean, onClick: () -> Unit) {
+private fun PidRow(pid: PidDef, reading: Reading?, open: Boolean, onInfo: () -> Unit, onClick: () -> Unit) {
     SectionCard(Modifier.clickable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(pid.name, fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(pid.name, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f, fill = false))
+                    InfoIcon(onInfo, Modifier.size(28.dp))
+                }
                 Text(
                     "PID %02X".format(pid.code) + if (reading != null)
                         " · min ${fmt(reading.min, pid.decimals)} · max ${fmt(reading.max, pid.decimals)}" else " · waiting…",

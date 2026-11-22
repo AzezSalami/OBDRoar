@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.obdroar.app.ConnState
 import com.obdroar.app.MainViewModel
 import com.obdroar.app.obd.Pids
+import com.obdroar.app.obd.SensorInfoDb
 import com.obdroar.app.ui.components.*
 import com.obdroar.app.ui.theme.RoarColors
 
@@ -29,6 +30,8 @@ fun DashboardScreen(vm: MainViewModel, onConnect: () -> Unit, onOpenDiagnostics:
     val vehicle by vm.vehicle.collectAsStateWithLifecycle()
 
     fun v(code: Int) = live[code]?.value
+    var infoFor by remember { mutableStateOf<Int?>(null) }
+    val batteryCode = if (vehicle.voltage != null) SensorInfoDb.BATTERY else Pids.MODULE_VOLTAGE
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -50,50 +53,64 @@ fun DashboardScreen(vm: MainViewModel, onConnect: () -> Unit, onOpenDiagnostics:
                 ArcGauge(
                     value = v(Pids.RPM)?.toFloat(), min = 0f, max = 8000f, label = "ENGINE", unit = "rpm",
                     modifier = Modifier.weight(1f), redFrom = 6500f,
-                    tickLabel = { (it / 1000).toInt().toString() }
+                    tickLabel = { (it / 1000).toInt().toString() },
+                    onInfo = { infoFor = Pids.RPM }
                 )
                 ArcGauge(
                     value = v(Pids.SPEED)?.toFloat(), min = 0f, max = 240f, label = "SPEED", unit = "km/h",
                     modifier = Modifier.weight(1f), accent = RoarColors.Cyan,
-                    tickLabel = { it.toInt().toString() }
+                    tickLabel = { it.toInt().toString() },
+                    onInfo = { infoFor = Pids.SPEED }
                 )
             }
         }
 
         val tiles = listOf(
-            Tile("Coolant", fmt(v(Pids.COOLANT)), "°C", Icons.Filled.Thermostat,
+            Tile(Pids.COOLANT, "Coolant", fmt(v(Pids.COOLANT)), "°C", Icons.Filled.Thermostat,
                 if ((v(Pids.COOLANT) ?: 0.0) > 105) RoarColors.Red else RoarColors.Cyan,
                 v(Pids.COOLANT)?.let { ((it + 40) / 170).toFloat() }),
-            Tile("Engine load", fmt(v(Pids.LOAD)), "%", Icons.Filled.Speed, RoarColors.Orange,
+            Tile(Pids.LOAD, "Engine load", fmt(v(Pids.LOAD)), "%", Icons.Filled.Speed, RoarColors.Orange,
                 v(Pids.LOAD)?.let { (it / 100).toFloat() }),
-            Tile("Throttle", fmt(v(Pids.THROTTLE)), "%", Icons.Filled.Tune, RoarColors.Amber,
+            Tile(Pids.THROTTLE, "Throttle", fmt(v(Pids.THROTTLE)), "%", Icons.Filled.Tune, RoarColors.Amber,
                 v(Pids.THROTTLE)?.let { (it / 100).toFloat() }),
-            Tile("Intake air", fmt(v(Pids.IAT)), "°C", Icons.Filled.Air, RoarColors.Cyan, null),
-            Tile("Air flow (MAF)", fmt(v(Pids.MAF), 1), "g/s", Icons.Filled.Air, RoarColors.Green, null),
-            Tile("Manifold", fmt(v(Pids.MAP)), "kPa", Icons.Filled.Sensors, RoarColors.Green, null),
-            Tile("Battery", fmt(vehicle.voltage ?: v(Pids.MODULE_VOLTAGE), 1), "V", Icons.Filled.BatteryChargingFull,
+            Tile(Pids.IAT, "Intake air", fmt(v(Pids.IAT)), "°C", Icons.Filled.Air, RoarColors.Cyan, null),
+            Tile(Pids.MAF, "Air flow (MAF)", fmt(v(Pids.MAF), 1), "g/s", Icons.Filled.Air, RoarColors.Green, null),
+            Tile(Pids.MAP, "Manifold", fmt(v(Pids.MAP)), "kPa", Icons.Filled.Sensors, RoarColors.Green, null),
+            Tile(batteryCode, "Battery", fmt(vehicle.voltage ?: v(Pids.MODULE_VOLTAGE), 1), "V", Icons.Filled.BatteryChargingFull,
                 batteryColor(vehicle.voltage ?: v(Pids.MODULE_VOLTAGE)), null),
-            Tile("Fuel level", fmt(v(Pids.FUEL_LEVEL)), "%", Icons.Filled.LocalGasStation, RoarColors.Amber,
+            Tile(Pids.FUEL_LEVEL, "Fuel level", fmt(v(Pids.FUEL_LEVEL)), "%", Icons.Filled.LocalGasStation, RoarColors.Amber,
                 v(Pids.FUEL_LEVEL)?.let { (it / 100).toFloat() }),
-            Tile("Fuel trim ST/LT", "${fmt(v(Pids.STFT1))}/${fmt(v(Pids.LTFT1))}", "%", Icons.Filled.Tune,
+            Tile(Pids.STFT1, "Fuel trim ST/LT", "${fmt(v(Pids.STFT1))}/${fmt(v(Pids.LTFT1))}", "%", Icons.Filled.Tune,
                 RoarColors.Orange, null),
-            Tile("Oil temp", fmt(v(Pids.OIL_TEMP)), "°C", Icons.Filled.Opacity, RoarColors.Amber, null),
-            Tile("Timing advance", fmt(v(Pids.TIMING), 1), "°", Icons.Filled.Timer, RoarColors.Cyan, null),
-            Tile("Fuel rate", fmt(v(Pids.FUEL_RATE), 1), "L/h", Icons.Filled.LocalGasStation, RoarColors.Green, null),
+            Tile(Pids.OIL_TEMP, "Oil temp", fmt(v(Pids.OIL_TEMP)), "°C", Icons.Filled.Opacity, RoarColors.Amber, null),
+            Tile(Pids.TIMING, "Timing advance", fmt(v(Pids.TIMING), 1), "°", Icons.Filled.Timer, RoarColors.Cyan, null),
+            Tile(Pids.FUEL_RATE, "Fuel rate", fmt(v(Pids.FUEL_RATE), 1), "L/h", Icons.Filled.LocalGasStation, RoarColors.Green, null),
         )
         tiles.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { t ->
-                    StatTile(t.label, t.value, t.unit, t.icon, Modifier.weight(1f), t.color, t.progress)
+                    StatTile(
+                        t.label, t.value, t.unit, t.icon, Modifier.weight(1f), t.color, t.progress,
+                        onInfo = { infoFor = t.code }
+                    )
                 }
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
         Spacer(Modifier.height(8.dp))
     }
+
+    infoFor?.let { code ->
+        SensorInfoDialog(
+            code = code,
+            currentValue = if (code == SensorInfoDb.BATTERY) vehicle.voltage else v(code),
+            onDismiss = { infoFor = null }
+        )
+    }
 }
 
 private data class Tile(
+    val code: Int,
     val label: String, val value: String, val unit: String, val icon: ImageVector,
     val color: Color, val progress: Float?
 )

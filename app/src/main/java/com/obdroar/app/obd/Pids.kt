@@ -37,7 +37,7 @@ object Pids {
     private fun trim(d: IntArray) = (d[0] - 128) * 100.0 / 128.0
 
     private fun o2(code: Int, n: Int): PidDef =
-        PidDef(code, "O2 sensor $n voltage", "V", 2, 0.0, 1.275, 3, "Oxygen sensors") { it[0] / 200.0 }
+        PidDef(code, "O2 sensor B${(n - 1) / 4 + 1}S${(n - 1) % 4 + 1} voltage", "V", 2, 0.0, 1.275, 3, "Oxygen sensors") { it[0] / 200.0 }
 
     val all: List<PidDef> = listOf(
         PidDef(RPM, "Engine RPM", "rpm", 2, 0.0, 8000.0) { ab(it) / 4.0 },
