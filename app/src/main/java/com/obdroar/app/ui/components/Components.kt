@@ -6,6 +6,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -99,6 +100,7 @@ fun ArcGauge(
     tickLabel: (Float) -> String = { it.roundToInt().toString() },
     accent: Color = RoarColors.Orange,
     onInfo: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
 ) {
     val target = (((value ?: min) - min) / (max - min)).coerceIn(0f, 1f)
     val frac by animateFloatAsState(
@@ -114,7 +116,10 @@ fun ArcGauge(
     val inRed = redFrom != null && value != null && value >= redFrom
     val arcColor = if (inRed) RoarColors.Red else accent
 
-    Box(modifier.aspectRatio(1f), contentAlignment = Alignment.Center) {
+    Box(
+        modifier.aspectRatio(1f).let { if (onClick != null) it.clickable(onClick = onClick) else it },
+        contentAlignment = Alignment.Center
+    ) {
         Canvas(Modifier.fillMaxSize()) {
             val dim = size.minDimension
             val stroke = dim * 0.06f
@@ -207,10 +212,12 @@ fun StatTile(
     accent: Color = RoarColors.Orange,
     progress: Float? = null,
     onInfo: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
 ) {
     Column(
         modifier
             .clip(RoundedCornerShape(18.dp))
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
             .background(RoarColors.Surface)
             .border(1.dp, RoarColors.Outline.copy(alpha = 0.6f), RoundedCornerShape(18.dp))
             .padding(14.dp)

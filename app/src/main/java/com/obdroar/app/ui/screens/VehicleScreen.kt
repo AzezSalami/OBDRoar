@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.obdroar.app.BuildConfig
 import com.obdroar.app.ConnState
 import com.obdroar.app.MainViewModel
+import com.obdroar.app.data.HistoryStats
 import com.obdroar.app.obd.Pids
 import com.obdroar.app.ui.components.*
 import com.obdroar.app.ui.theme.RoarColors
@@ -83,6 +84,8 @@ fun VehicleScreen(vm: MainViewModel, onConnect: () -> Unit) {
             }
         }
 
+        SavedHistoryCard(vm)
+
         SectionCard(title = "About") {
             InfoRow(Icons.Filled.Info, "App version", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             Spacer(Modifier.height(6.dp))
@@ -104,5 +107,58 @@ private fun InfoRow(icon: ImageVector, label: String, value: String) {
         Spacer(Modifier.width(10.dp))
         Text(label, color = RoarColors.TextDim, modifier = Modifier.weight(1f), fontSize = 13.sp)
         Text(value, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun SavedHistoryCard(vm: MainViewModel) {
+    val version by vm.historyVersion.collectAsStateWithLifecycle()
+    val recording by vm.recordHistory.collectAsStateWithLifecycle()
+    val stats by produceState<HistoryStats?>(null, version) {
+        value = runCatching { vm.history.stats() }.getOrNull()
+    }
+    var confirmDeleteAll by remember { mutableStateOf(false) }
+
+    SectionCard(title = "Saved history") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.History, null, tint = RoarColors.Orange)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Save readings while connected", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "One reading per sensor per second. Tap any sensor value to see its graph.",
+                    fontSize = 12.sp, color = RoarColors.TextDim
+                )
+            }
+            Switch(checked = recording, onCheckedChange = vm::setRecordHistory)
+        }
+        stats?.let { st ->
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "${st.sessions} drive${if (st.sessions == 1) "" else "s"} · " +
+                    "${String.format(java.util.Locale.getDefault(), "%,d", st.samples)} readings · ${formatBytes(st.bytes)}",
+                fontSize = 12.sp, color = RoarColors.TextDim
+            )
+        }
+        if ((stats?.sessions ?: 0) > 0) {
+            TextButton(onClick = { confirmDeleteAll = true }, contentPadding = PaddingValues(0.dp)) {
+                Icon(Icons.Filled.DeleteForever, null, tint = RoarColors.Red, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Delete all history", color = RoarColors.Red)
+            }
+        }
+    }
+
+    if (confirmDeleteAll) {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteAll = false },
+            icon = { Icon(Icons.Filled.DeleteForever, null, tint = RoarColors.Red) },
+            title = { Text("Delete all saved history?") },
+            text = { Text("All saved drives and readings will be permanently removed from this phone. This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDeleteAll = false; vm.deleteAllHistory() }) { Text("Delete all", color = RoarColors.Red) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDeleteAll = false }) { Text("Cancel") } }
+        )
     }
 }

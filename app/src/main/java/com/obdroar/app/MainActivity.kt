@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -62,7 +61,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.obdroar.app.ui.screens.ConnectDialog
 import com.obdroar.app.ui.screens.DashboardScreen
 import com.obdroar.app.ui.screens.DiagnosticsScreen
-import com.obdroar.app.ui.screens.HistoryScreen
 import com.obdroar.app.ui.screens.LiveDataScreen
 import com.obdroar.app.ui.screens.SoundScreen
 import com.obdroar.app.ui.screens.VehicleScreen
@@ -90,13 +88,12 @@ class MainActivity : ComponentActivity() {
 private data class Tab(val title: String, val icon: ImageVector)
 
 private const val TAB_DIAGNOSE = 2
-private const val TAB_VEHICLE = 5
+private const val TAB_VEHICLE = 4
 
 private val tabs = listOf(
     Tab("Dash", Icons.Filled.Dashboard),
-    Tab("Live", Icons.Filled.ShowChart),
+    Tab("Sensors", Icons.Filled.ShowChart),
     Tab("Codes", Icons.Filled.Build),
-    Tab("History", Icons.Filled.History),
     Tab("Sound", Icons.Filled.GraphicEq),
     Tab("Car", Icons.Filled.DirectionsCar),
 )
@@ -160,7 +157,7 @@ private fun App(vm: MainViewModel) {
                             Text(
                                 "  ● REC", color = RoarColors.Red, fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
-                                modifier = Modifier.clickable { tab = 3 }
+                                modifier = Modifier.clickable { tab = TAB_VEHICLE }
                             )
                         }
                     }
@@ -207,8 +204,7 @@ private fun App(vm: MainViewModel) {
                 0 -> DashboardScreen(vm, onConnect = onConnect, onOpenDiagnostics = { tab = TAB_DIAGNOSE })
                 1 -> LiveDataScreen(vm)
                 TAB_DIAGNOSE -> DiagnosticsScreen(vm)
-                3 -> HistoryScreen(vm)
-                4 -> SoundScreen(vm)
+                3 -> SoundScreen(vm)
                 else -> VehicleScreen(vm, onConnect = onConnect)
             }
         }

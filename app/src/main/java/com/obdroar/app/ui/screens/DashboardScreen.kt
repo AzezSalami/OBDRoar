@@ -31,6 +31,7 @@ fun DashboardScreen(vm: MainViewModel, onConnect: () -> Unit, onOpenDiagnostics:
 
     fun v(code: Int) = live[code]?.value
     var infoFor by remember { mutableStateOf<Int?>(null) }
+    var chartFor by remember { mutableStateOf<Int?>(null) }
     val batteryCode = if (vehicle.voltage != null) SensorInfoDb.BATTERY else Pids.MODULE_VOLTAGE
 
     Column(
@@ -54,13 +55,15 @@ fun DashboardScreen(vm: MainViewModel, onConnect: () -> Unit, onOpenDiagnostics:
                     value = v(Pids.RPM)?.toFloat(), min = 0f, max = 8000f, label = "ENGINE", unit = "rpm",
                     modifier = Modifier.weight(1f), redFrom = 6500f,
                     tickLabel = { (it / 1000).toInt().toString() },
-                    onInfo = { infoFor = Pids.RPM }
+                    onInfo = { infoFor = Pids.RPM },
+                    onClick = { chartFor = Pids.RPM }
                 )
                 ArcGauge(
                     value = v(Pids.SPEED)?.toFloat(), min = 0f, max = 240f, label = "SPEED", unit = "km/h",
                     modifier = Modifier.weight(1f), accent = RoarColors.Cyan,
                     tickLabel = { it.toInt().toString() },
-                    onInfo = { infoFor = Pids.SPEED }
+                    onInfo = { infoFor = Pids.SPEED },
+                    onClick = { chartFor = Pids.SPEED }
                 )
             }
         }
@@ -91,13 +94,18 @@ fun DashboardScreen(vm: MainViewModel, onConnect: () -> Unit, onOpenDiagnostics:
                 row.forEach { t ->
                     StatTile(
                         t.label, t.value, t.unit, t.icon, Modifier.weight(1f), t.color, t.progress,
-                        onInfo = { infoFor = t.code }
+                        onInfo = { infoFor = t.code },
+                        onClick = { chartFor = t.code }
                     )
                 }
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
         Spacer(Modifier.height(8.dp))
+    }
+
+    chartFor?.let { code ->
+        SensorHistorySheet(vm, code) { chartFor = null }
     }
 
     infoFor?.let { code ->

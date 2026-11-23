@@ -1,6 +1,5 @@
 package com.obdroar.app.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,7 +31,7 @@ fun LiveDataScreen(vm: MainViewModel) {
     val live by vm.live.collectAsStateWithLifecycle()
     val vehicle by vm.vehicle.collectAsStateWithLifecycle()
     var category by remember { mutableStateOf("All") }
-    val expanded = remember { mutableStateMapOf<Int, Boolean>() }
+    var chartFor by remember { mutableStateOf<Int?>(null) }
     var infoFor by remember { mutableStateOf<Int?>(null) }
 
     if (conn.state != ConnState.CONNECTED) {
@@ -54,7 +53,7 @@ fun LiveDataScreen(vm: MainViewModel) {
             }
         }
         Text(
-            "${live.size} of ${pids.size} sensors reporting · tap a row for its graph, (!) for an explanation",
+            "${live.size} of ${pids.size} sensors reporting · tap a sensor for its graph, (!) for an explanation",
             fontSize = 12.sp, color = RoarColors.TextDim, modifier = Modifier.padding(horizontal = 16.dp)
         )
         LazyColumn(
@@ -62,10 +61,13 @@ fun LiveDataScreen(vm: MainViewModel) {
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(shown, key = { it.code }) { pid ->
-                val isOpen = expanded[pid.code] == true
-                PidRow(pid, live[pid.code], isOpen, onInfo = { infoFor = pid.code }) { expanded[pid.code] = !isOpen }
+                PidRow(pid, live[pid.code], onInfo = { infoFor = pid.code }) { chartFor = pid.code }
             }
         }
+    }
+
+    chartFor?.let { code ->
+        SensorHistorySheet(vm, code) { chartFor = null }
     }
 
     infoFor?.let { code ->
@@ -74,7 +76,7 @@ fun LiveDataScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun PidRow(pid: PidDef, reading: Reading?, open: Boolean, onInfo: () -> Unit, onClick: () -> Unit) {
+private fun PidRow(pid: PidDef, reading: Reading?, onInfo: () -> Unit, onClick: () -> Unit) {
     SectionCard(Modifier.clickable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -88,7 +90,7 @@ private fun PidRow(pid: PidDef, reading: Reading?, open: Boolean, onInfo: () -> 
                     fontSize = 11.sp, color = RoarColors.TextDim
                 )
             }
-            if (!open && reading != null) {
+            if (reading != null) {
                 Sparkline(reading.history.takeLast(40), Modifier.width(64.dp).height(28.dp))
                 Spacer(Modifier.width(12.dp))
             }
@@ -98,13 +100,6 @@ private fun PidRow(pid: PidDef, reading: Reading?, open: Boolean, onInfo: () -> 
             )
             Spacer(Modifier.width(4.dp))
             Text(pid.unit, fontSize = 12.sp, color = RoarColors.TextDim)
-        }
-        AnimatedVisibility(open && reading != null) {
-            Column {
-                Spacer(Modifier.height(12.dp))
-                Sparkline(reading?.history ?: emptyList(), Modifier.fillMaxWidth().height(120.dp))
-                Text("Last ${reading?.history?.size ?: 0} samples", fontSize = 11.sp, color = RoarColors.TextDim)
-            }
         }
     }
 }
