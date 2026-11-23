@@ -59,8 +59,8 @@ class DemoTransport : ObdTransport {
             "04" -> { cleared = true; return "44" }
             "0902" -> return vinFrames()
         }
-        if (cmd.length == 4 && cmd.startsWith("01")) {
-            val pid = cmd.substring(2).toIntOrNull(16) ?: return "?"
+        if ((cmd.length == 4 || (cmd.length == 5 && cmd.endsWith("1"))) && cmd.startsWith("01")) {
+            val pid = cmd.substring(2, 4).toIntOrNull(16) ?: return "?"
             if (pid % 0x20 == 0) return "41" + hex(pid) + bitmask(pid)
             val data = pidData(pid) ?: return "NO DATA"
             return "41" + hex(pid) + data

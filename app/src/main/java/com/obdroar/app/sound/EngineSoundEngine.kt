@@ -40,6 +40,23 @@ class EngineSoundEngine {
 
     /** When non-null the engine follows this RPM (from the real car) instead of free-revving. */
     @Volatile var externalRpm: Float? = null
+        set(value) {
+            val now = System.nanoTime()
+            val prev = field
+            val gap = (now - extTime) / 1e9f
+            if (value != null && prev != null && gap in 0.02f..1f) {
+                // rev rate (rpm/s), lightly damped so one noisy reading doesn't swing the pitch
+                extSlope = extSlope * 0.3f + (value - prev) / gap * 0.7f
+                extInterval = extInterval * 0.7f + gap * 0.3f
+            } else {
+                extSlope = 0f
+            }
+            extTime = now
+            field = value
+        }
+    @Volatile private var extTime = 0L
+    @Volatile private var extSlope = 0f
+    @Volatile private var extInterval = 0.15f
     @Volatile var volume: Float = 0.8f
     @Volatile var turbo: Boolean = false
     @Volatile var popsAndBangs: Boolean = true
@@ -183,7 +200,13 @@ class EngineSoundEngine {
             }
             EngineState.RUNNING -> {
                 if (ext != null) {
-                    rpmInternal += (ext - rpmInternal) * min(1f, dt * 5f)
+                    // The car only reports RPM every ~0.1–0.3 s. Between readings, keep moving in the
+                    // direction the revs were heading (at most one reading interval ahead) so the
+                    // sound doesn't lag behind, then ease quickly toward that estimate.
+                    val since = (System.nanoTime() - extTime) / 1e9f
+                    val ahead = min(since, min(extInterval, 0.3f))
+                    val predicted = (ext + extSlope * ahead).coerceIn(0f, p.redline * 1.1f)
+                    rpmInternal += (predicted - rpmInternal) * min(1f, dt * 14f)
                     limiter = false
                 } else {
                     val shaped = thr.pow(1.15f)

@@ -100,7 +100,10 @@ class ObdSession(val transport: ObdTransport) {
     /** Data bytes of every ECU that answered Mode 01 [pid]. */
     suspend fun mode01All(pid: Int): List<IntArray> {
         val cmd = "01%02X".format(pid)
-        val raw = send(cmd)
+        return parseMode01(send(cmd), cmd, pid)
+    }
+
+    private fun parseMode01(raw: String, cmd: String, pid: Int): List<IntArray> {
         val prefix = "41%02X".format(pid)
         return hexLines(raw, cmd).mapNotNull { line ->
             val i = indexOfEven(line, prefix, 0)
@@ -111,6 +114,31 @@ class ObdSession(val transport: ObdTransport) {
     suspend fun readPid(pid: PidDef): Double? {
         val data = mode01All(pid.code).firstOrNull { it.size >= pid.bytes } ?: return null
         return pid.formula(data)
+    }
+
+    /** Whether the "reply count" suffix works with this adapter/car; null = not known yet. */
+    private var singleReplyWorks: Boolean? = null
+
+    /**
+     * Like [readPid] but asks for "01xx1": the trailing 1 tells the ELM327 to return as soon as the
+     * first ECU answers instead of waiting for its silence timeout, which makes each reading much
+     * faster. If the adapter or car doesn't understand it we fall back to the normal request.
+     */
+    suspend fun readPidFast(pid: PidDef): Double? {
+        if (singleReplyWorks != false) {
+            val cmd = "01%02X1".format(pid.code)
+            val data = parseMode01(send(cmd), cmd, pid.code).firstOrNull { it.size >= pid.bytes }
+            if (data != null) {
+                singleReplyWorks = true
+                return pid.formula(data)
+            }
+            if (singleReplyWorks == true) return null // suffix is fine, this PID just has no data
+            // Not known yet: see if the plain request works. If it does, the suffix is the problem.
+            val plain = readPid(pid)
+            if (plain != null) singleReplyWorks = false
+            return plain
+        }
+        return readPid(pid)
     }
 
     private suspend fun readSupportedPids(): Set<Int> {

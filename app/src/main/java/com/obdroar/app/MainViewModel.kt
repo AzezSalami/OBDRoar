@@ -192,9 +192,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             var errors = 0
             while (isActive) {
                 try {
-                    for (pid in fast.toList()) poll(s, pid, failures, fast)
-                    repeat(2) {
+                    // RPM is read before every other request so the engine sound can follow the
+                    // car closely: RPM, speed, RPM, throttle, RPM, load, RPM, slow sensor…
+                    val rpmPid = fast.firstOrNull { it.code == Pids.RPM }
+                    suspend fun pollRpm() { if (rpmPid != null && rpmPid in fast) poll(s, rpmPid, failures, fast) }
+                    for (pid in fast.filter { it.code != Pids.RPM }) { pollRpm(); poll(s, pid, failures, fast) }
+                    // while the engine sound follows the car, read fewer slow sensors per cycle
+                    val slowPerCycle = if (_sound.value.follow && _sound.value.on) 1 else 2
+                    repeat(slowPerCycle) {
                         if (slow.isNotEmpty()) {
+                            pollRpm()
                             val pid = slow[idx % slow.size]
                             idx++
                             poll(s, pid, failures, slow)
@@ -221,7 +228,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun poll(s: ObdSession, pid: PidDef, failures: MutableMap<Int, Int>, list: MutableList<PidDef>) {
-        val v = s.readPid(pid)
+        val v = s.readPidFast(pid)
         if (v == null) {
             val f = (failures[pid.code] ?: 0) + 1
             failures[pid.code] = f
