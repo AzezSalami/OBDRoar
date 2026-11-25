@@ -34,7 +34,9 @@ fun LiveDataScreen(vm: MainViewModel) {
     var chartFor by remember { mutableStateOf<Int?>(null) }
     var infoFor by remember { mutableStateOf<Int?>(null) }
 
-    if (conn.state != ConnState.CONNECTED) {
+    val connected = conn.state == ConnState.CONNECTED
+    // After the link drops, keep showing the last readings (like the Dashboard does).
+    if (!connected && live.isEmpty()) {
         EmptyHint(Icons.Filled.ShowChart, "No live data yet", "Connect to an OBD2 adapter (or the demo car) to stream every sensor your engine reports.")
         return
     }
@@ -52,8 +54,16 @@ fun LiveDataScreen(vm: MainViewModel) {
                 FilterChip(selected = c == category, onClick = { category = c }, label = { Text(c) })
             }
         }
+        if (!connected) {
+            Text(
+                if (conn.state == ConnState.CONNECTING) "Reconnecting… showing the last readings"
+                else "Not connected · showing the last readings",
+                fontSize = 12.sp, color = RoarColors.Amber,
+                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 4.dp)
+            )
+        }
         Text(
-            "${live.size} of ${pids.size} sensors reporting · tap a sensor for its graph, (!) for an explanation",
+            "${live.size} of ${pids.size} sensors ${if (connected) "reporting" else "read"} · tap a sensor for its graph, (!) for an explanation",
             fontSize = 12.sp, color = RoarColors.TextDim, modifier = Modifier.padding(horizontal = 16.dp)
         )
         LazyColumn(
